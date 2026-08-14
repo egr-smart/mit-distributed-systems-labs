@@ -73,6 +73,11 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 				log.Fatalf("cannot write to %v", files[taskno].Name())
 			}
 		}
+
+		for i := 0; i < reply.NReduce; i++ {
+			files[i].Close()
+			os.Rename(files[i].Name(), fmt.Sprintf("mr-%x-%x", reply.CurrentFileIndex, i))
+		}
 	case "reduce":
 	case "done":
 	}
