@@ -1,11 +1,14 @@
 package mr
 
-import "fmt"
-import "log"
-import "net/rpc"
-import "hash/fnv"
-import "os"
-
+import (
+	"encoding/json"
+	"fmt"
+	"hash/fnv"
+	"io/ioutil"
+	"log"
+	"net/rpc"
+	"os"
+)
 
 // Map functions return a slice of KeyValue.
 type KeyValue struct {
@@ -23,45 +26,72 @@ func ihash(key string) int {
 
 var coordSockName string // socket for coordinator
 
+func readFile(filename string) string {
+	file, err := os.Open(filename)
+	if err != nil {
+		log.Fatalf("cannot open %v", filename)
+	}
+	content, err := ioutil.ReadAll(file)
+	if err != nil {
+		log.Fatalf("cannot read %v", filename)
+	}
+	file.Close()
+	return string(content)
+}
 
 // main/mrworker.go calls this function.
 func Worker(sockname string, mapf func(string, string) []KeyValue,
-	reducef func(string, []string) string) {
-
+	reducef func(string, []string) string,
+) {
 	coordSockName = sockname
 
 	// Your worker implementation here.
 
 	// uncomment to send the Example RPC to the coordinator.
-	// CallExample()
+	reply := GetTask()
 
+	switch reply.TaskType {
+	case "map":
+		content := readFile(reply.FileName)
+		kva := mapf(reply.FileName, content)
+		files := make([]*os.File, reply.NReduce)
+		encoders := make([]*json.Encoder, reply.NReduce)
+		// create files and encoders
+		for i := 0; i < reply.NReduce; i++ {
+			file, err := os.CreateTemp(".", "mr-tmp-*")
+			if err != nil {
+				log.Fatalf("cannot write %v", file.Name())
+			}
+			files[i] = file
+			encoders[i] = json.NewEncoder(file)
+		}
+
+		for _, kv := range kva {
+			taskno := ihash(kv.Key) % reply.NReduce
+			err := encoders[taskno].Encode(&kv)
+			if err != nil {
+				log.Fatalf("cannot write to %v", files[taskno].Name())
+			}
+		}
+	case "reduce":
+	case "done":
+	}
 }
 
-// example function to show how to make an RPC call to the coordinator.
-//
-// the RPC argument and reply types are defined in rpc.go.
-func CallExample() {
+func GetTask() Reply {
+	args := Args{}
 
-	// declare an argument structure.
-	args := ExampleArgs{}
+	args.X = 0
 
-	// fill in the argument(s).
-	args.X = 99
+	reply := Reply{}
 
-	// declare a reply structure.
-	reply := ExampleReply{}
-
-	// send the RPC request, wait for the reply.
-	// the "Coordinator.Example" tells the
-	// receiving server that we'd like to call
-	// the Example() method of struct Coordinator.
-	ok := call("Coordinator.Example", &args, &reply)
+	ok := call("Coordinator.AssignTask", &args, &reply)
 	if ok {
-		// reply.Y should be 100.
-		fmt.Printf("reply.Y %v\n", reply.Y)
+		return reply
 	} else {
 		fmt.Printf("call failed!\n")
 	}
+	return reply
 }
 
 // send an RPC request to the coordinator, wait for the response.

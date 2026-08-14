@@ -1,27 +1,46 @@
 package mr
 
-import "log"
-import "net"
-import "os"
-import "net/rpc"
-import "net/http"
-
+import (
+	"log"
+	"net"
+	"net/http"
+	"net/rpc"
+	"os"
+)
 
 type Coordinator struct {
-	// Your definitions here.
-
+	NMap             int
+	NReduce          int
+	CurrentFileIndex int
+	Files            []string
+	Mapping          bool
+	Reducing         bool
 }
 
-// Your code here -- RPC handlers for the worker to call.
-
-// an example RPC handler.
-//
-// the RPC argument and reply types are defined in rpc.go.
-func (c *Coordinator) Example(args *ExampleArgs, reply *ExampleReply) error {
-	reply.Y = args.X + 1
+func (c *Coordinator) AssignTask(args *Args, reply *Reply) error {
+	if c.CurrentFileIndex == len(c.Files) {
+		if c.Mapping {
+			c.CurrentFileIndex = 0
+			c.Mapping = false
+			c.Reducing = true
+		} else {
+			reply.TaskType = "done"
+			return nil
+		}
+	}
+	if c.Mapping {
+		reply.FileName = c.Files[c.CurrentFileIndex]
+		reply.NReduce = c.NReduce
+		reply.TaskType = "map"
+		c.CurrentFileIndex += 1
+	} else {
+		reply.NMap = c.NMap
+		reply.TaskType = "reduce"
+		reply.CurrentFileIndex = c.CurrentFileIndex
+		c.CurrentFileIndex += 1
+	}
 	return nil
 }
-
 
 // start a thread that listens for RPCs from worker.go
 func (c *Coordinator) server(sockname string) {
@@ -39,10 +58,9 @@ func (c *Coordinator) server(sockname string) {
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
 	ret := false
-
-	// Your code here.
-
-
+	if c.Reducing && c.CurrentFileIndex == len(c.Files) {
+		ret = true
+	}
 	return ret
 }
 
@@ -50,10 +68,14 @@ func (c *Coordinator) Done() bool {
 // main/mrcoordinator.go calls this function.
 // nReduce is the number of reduce tasks to use.
 func MakeCoordinator(sockname string, files []string, nReduce int) *Coordinator {
-	c := Coordinator{}
-
-	// Your code here.
-
+	c := Coordinator{
+		NMap:             len(files),
+		NReduce:          nReduce,
+		CurrentFileIndex: 0,
+		Files:            files,
+		Mapping:          true,
+		Reducing:         false,
+	}
 
 	c.server(sockname)
 	return &c
