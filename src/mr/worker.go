@@ -45,9 +45,6 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 ) {
 	coordSockName = sockname
 
-	// Your worker implementation here.
-
-	// uncomment to send the Example RPC to the coordinator.
 	reply := GetTask()
 
 	switch reply.TaskType {
@@ -78,8 +75,50 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 			files[i].Close()
 			os.Rename(files[i].Name(), fmt.Sprintf("mr-%x-%x", reply.CurrentFileIndex, i))
 		}
+
+		ReportComplete(reply.CurrentFileIndex, reply.TaskType)
 	case "reduce":
+		oname := "mr-out-0"
+		ofile, _ := os.Create(oname)
+
+		i := 0
+		for i < len(intermediate) {
+			j := i + 1
+			for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
+				j++
+			}
+			values := []string{}
+			for k := i; k < j; k++ {
+				values = append(values, intermediate[k].Value)
+			}
+			output := reducef(intermediate[i].Key, values)
+
+			// this is the correct format for each line of Reduce output.
+			fmt.Fprintf(ofile, "%v %v\n", intermediate[i].Key, output)
+
+			i = j
+		}
+
+		ofile.Close()
 	case "done":
+	}
+}
+
+func ReportComplete(taskNo int, taskType string) {
+	msg := UpdateMessage{}
+	msg.TaskNo = taskNo
+	msg.TaskType = taskType
+
+	reply := UpdateRecieved{}
+
+	ok := call("Coordinator.ReportComplete", &msg, &reply)
+	if ok {
+		if !reply.Acknowledge {
+			fmt.Printf("report complete not acknowledged\n")
+		}
+		return
+	} else {
+		fmt.Printf("call to report complete failed!\n")
 	}
 }
 
@@ -94,7 +133,7 @@ func GetTask() Reply {
 	if ok {
 		return reply
 	} else {
-		fmt.Printf("call failed!\n")
+		fmt.Printf("call to get task failed!\n")
 	}
 	return reply
 }

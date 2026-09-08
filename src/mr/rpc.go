@@ -16,11 +16,19 @@ type Args struct {
 }
 
 type Reply struct {
-	NReduce          int
-	NMap             int
-	TaskType         string
-	FileName         string
-	CurrentFileIndex int
+	NReduce            int
+	NMap               int
+	TaskType           string
+	FileName           string
+	CurrentFileIndex   int
+	CurrentBucketIndex int
 }
 
-// Add your RPC definitions here.
+type UpdateMessage struct {
+	TaskType string
+	TaskNo   int
+}
+
+type UpdateRecieved struct {
+	Acknowledge bool
+}
