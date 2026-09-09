@@ -16,12 +16,11 @@ type Args struct {
 }
 
 type Reply struct {
-	NReduce            int
-	NMap               int
-	TaskType           string
-	FileName           string
-	CurrentFileIndex   int
-	CurrentBucketIndex int
+	NReduce  int
+	NMap     int
+	TaskType string
+	FileName string
+	TaskNo   int
 }
 
 type UpdateMessage struct {
