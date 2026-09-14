@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/rpc"
 	"os"
+	"time"
 )
 
 // Map functions return a slice of KeyValue.
@@ -73,12 +74,28 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 
 		for i := 0; i < reply.NReduce; i++ {
 			files[i].Close()
-			os.Rename(files[i].Name(), fmt.Sprintf("mr-%x-%x", reply.CurrentFileIndex, i))
+			os.Rename(files[i].Name(), fmt.Sprintf("mr-%x-%x", reply.TaskNo, i))
 		}
 
-		ReportComplete(reply.CurrentFileIndex, reply.TaskType)
+		ReportComplete(reply.TaskNo, reply.TaskType)
 	case "reduce":
-		oname := "mr-out-0"
+		intermediate := []KeyValue{}
+		for i := 0; i < reply.NMap; i++ {
+			filename := fmt.Sprintf("mr-%x-%x", i, reply.TaskNo)
+			file, err := os.Open(filename)
+			if err != nil {
+				log.Fatalf("cannot open %v", filename)
+			}
+			content, err := ioutil.ReadAll(file)
+			if err != nil {
+				log.Fatalf("cannot read %v", filename)
+			}
+			file.Close()
+			kva := mapf(filename, string(content))
+			intermediate = append(intermediate, kva...)
+		}
+
+		oname := fmt.Sprintf("mr-out-%x", reply.TaskNo)
 		ofile, _ := os.Create(oname)
 
 		i := 0
@@ -100,6 +117,9 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 		}
 
 		ofile.Close()
+		ReportComplete(reply.TaskNo, reply.TaskType)
+	case "wait":
+		time.Sleep(time.Second)
 	case "done":
 	}
 }

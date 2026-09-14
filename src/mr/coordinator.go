@@ -98,7 +98,7 @@ func (c *Coordinator) AssignTask(args *Args, reply *Reply) error {
 	return nil
 }
 
-func (c *Coordinator) ReportComplete(args *UpdateMessage, reply UpdateRecieved) error {
+func (c *Coordinator) ReportComplete(args *UpdateMessage, reply *UpdateRecieved) error {
 	if args.TaskType == "map" {
 		c.MapTaskList[args.TaskNo].Status = Complete
 	} else {
