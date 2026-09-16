@@ -6,10 +6,12 @@ import (
 	"net/http"
 	"net/rpc"
 	"os"
+	"sync"
 	"time"
 )
 
 type Coordinator struct {
+	Mu             sync.Mutex
 	NMap           int
 	NReduce        int
 	Files          []string
@@ -32,6 +34,8 @@ type Task struct {
 }
 
 func (c *Coordinator) AssignTask(args *Args, reply *Reply) error {
+	c.Mu.Lock()
+	defer c.Mu.Unlock()
 	if c.Mapping {
 		notComplete := false
 		for i, task := range c.MapTaskList {
@@ -99,6 +103,8 @@ func (c *Coordinator) AssignTask(args *Args, reply *Reply) error {
 }
 
 func (c *Coordinator) ReportComplete(args *UpdateMessage, reply *UpdateRecieved) error {
+	c.Mu.Lock()
+	defer c.Mu.Unlock()
 	if args.TaskType == "map" {
 		c.MapTaskList[args.TaskNo].Status = Complete
 	} else {
@@ -123,6 +129,8 @@ func (c *Coordinator) server(sockname string) {
 // main/mrcoordinator.go calls Done() periodically to find out
 // if the entire job has finished.
 func (c *Coordinator) Done() bool {
+	c.Mu.Lock()
+	defer c.Mu.Unlock()
 	ret := false
 	if c.Complete {
 		ret = true
