@@ -46,81 +46,85 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 ) {
 	coordSockName = sockname
 
-	reply := GetTask()
+	notDone := true
+	for notDone {
+		reply := GetTask()
 
-	switch reply.TaskType {
-	case "map":
-		content := readFile(reply.FileName)
-		kva := mapf(reply.FileName, content)
-		files := make([]*os.File, reply.NReduce)
-		encoders := make([]*json.Encoder, reply.NReduce)
-		// create files and encoders
-		for i := 0; i < reply.NReduce; i++ {
-			file, err := os.CreateTemp(".", "mr-tmp-*")
-			if err != nil {
-				log.Fatalf("cannot write %v", file.Name())
+		switch reply.TaskType {
+		case "map":
+			content := readFile(reply.FileName)
+			kva := mapf(reply.FileName, content)
+			files := make([]*os.File, reply.NReduce)
+			encoders := make([]*json.Encoder, reply.NReduce)
+			// create files and encoders
+			for i := 0; i < reply.NReduce; i++ {
+				file, err := os.CreateTemp(".", "mr-tmp-*")
+				if err != nil {
+					log.Fatalf("cannot write %v", file.Name())
+				}
+				files[i] = file
+				encoders[i] = json.NewEncoder(file)
 			}
-			files[i] = file
-			encoders[i] = json.NewEncoder(file)
+
+			for _, kv := range kva {
+				taskno := ihash(kv.Key) % reply.NReduce
+				err := encoders[taskno].Encode(&kv)
+				if err != nil {
+					log.Fatalf("cannot write to %v", files[taskno].Name())
+				}
+			}
+
+			for i := 0; i < reply.NReduce; i++ {
+				files[i].Close()
+				os.Rename(files[i].Name(), fmt.Sprintf("mr-%x-%x", reply.TaskNo, i))
+			}
+
+			ReportComplete(reply.TaskNo, reply.TaskType)
+		case "reduce":
+			intermediate := []KeyValue{}
+			for i := 0; i < reply.NMap; i++ {
+				filename := fmt.Sprintf("mr-%x-%x", i, reply.TaskNo)
+				file, err := os.Open(filename)
+				if err != nil {
+					log.Fatalf("cannot open %v", filename)
+				}
+				content, err := ioutil.ReadAll(file)
+				if err != nil {
+					log.Fatalf("cannot read %v", filename)
+				}
+				file.Close()
+				kva := mapf(filename, string(content))
+				intermediate = append(intermediate, kva...)
+			}
+
+			oname := fmt.Sprintf("mr-out-%x", reply.TaskNo)
+			ofile, _ := os.Create(oname)
+
+			i := 0
+			for i < len(intermediate) {
+				j := i + 1
+				for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
+					j++
+				}
+				values := []string{}
+				for k := i; k < j; k++ {
+					values = append(values, intermediate[k].Value)
+				}
+				output := reducef(intermediate[i].Key, values)
+
+				// this is the correct format for each line of Reduce output.
+				fmt.Fprintf(ofile, "%v %v\n", intermediate[i].Key, output)
+
+				i = j
+			}
+
+			ofile.Close()
+			ReportComplete(reply.TaskNo, reply.TaskType)
+		case "wait":
+			time.Sleep(time.Second)
+		case "done":
+			notDone = false
 		}
-
-		for _, kv := range kva {
-			taskno := ihash(kv.Key) % reply.NReduce
-			err := encoders[taskno].Encode(&kv)
-			if err != nil {
-				log.Fatalf("cannot write to %v", files[taskno].Name())
-			}
-		}
-
-		for i := 0; i < reply.NReduce; i++ {
-			files[i].Close()
-			os.Rename(files[i].Name(), fmt.Sprintf("mr-%x-%x", reply.TaskNo, i))
-		}
-
-		ReportComplete(reply.TaskNo, reply.TaskType)
-	case "reduce":
-		intermediate := []KeyValue{}
-		for i := 0; i < reply.NMap; i++ {
-			filename := fmt.Sprintf("mr-%x-%x", i, reply.TaskNo)
-			file, err := os.Open(filename)
-			if err != nil {
-				log.Fatalf("cannot open %v", filename)
-			}
-			content, err := ioutil.ReadAll(file)
-			if err != nil {
-				log.Fatalf("cannot read %v", filename)
-			}
-			file.Close()
-			kva := mapf(filename, string(content))
-			intermediate = append(intermediate, kva...)
-		}
-
-		oname := fmt.Sprintf("mr-out-%x", reply.TaskNo)
-		ofile, _ := os.Create(oname)
-
-		i := 0
-		for i < len(intermediate) {
-			j := i + 1
-			for j < len(intermediate) && intermediate[j].Key == intermediate[i].Key {
-				j++
-			}
-			values := []string{}
-			for k := i; k < j; k++ {
-				values = append(values, intermediate[k].Value)
-			}
-			output := reducef(intermediate[i].Key, values)
-
-			// this is the correct format for each line of Reduce output.
-			fmt.Fprintf(ofile, "%v %v\n", intermediate[i].Key, output)
-
-			i = j
-		}
-
-		ofile.Close()
-		ReportComplete(reply.TaskNo, reply.TaskType)
-	case "wait":
-		time.Sleep(time.Second)
-	case "done":
 	}
 }
 
