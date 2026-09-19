@@ -8,6 +8,7 @@ import (
 	"log"
 	"net/rpc"
 	"os"
+	"sort"
 	"time"
 )
 
@@ -76,28 +77,35 @@ func Worker(sockname string, mapf func(string, string) []KeyValue,
 
 			for i := 0; i < reply.NReduce; i++ {
 				files[i].Close()
-				os.Rename(files[i].Name(), fmt.Sprintf("mr-%x-%x", reply.TaskNo, i))
+				os.Rename(files[i].Name(), fmt.Sprintf("mr-%d-%d", reply.TaskNo, i))
 			}
 
 			ReportComplete(reply.TaskNo, reply.TaskType)
 		case "reduce":
 			intermediate := []KeyValue{}
 			for i := 0; i < reply.NMap; i++ {
-				filename := fmt.Sprintf("mr-%x-%x", i, reply.TaskNo)
+				filename := fmt.Sprintf("mr-%d-%d", i, reply.TaskNo)
 				file, err := os.Open(filename)
+				decoder := json.NewDecoder(file)
 				if err != nil {
 					log.Fatalf("cannot open %v", filename)
 				}
-				content, err := ioutil.ReadAll(file)
-				if err != nil {
-					log.Fatalf("cannot read %v", filename)
+				for {
+					var kv KeyValue
+					err = decoder.Decode(&kv)
+					if err != nil {
+						break
+					}
+					intermediate = append(intermediate, kv)
 				}
 				file.Close()
-				kva := mapf(filename, string(content))
-				intermediate = append(intermediate, kva...)
 			}
 
-			oname := fmt.Sprintf("mr-out-%x", reply.TaskNo)
+			sort.Slice(intermediate, func(i, j int) bool {
+				return intermediate[i].Key < intermediate[j].Key
+			})
+
+			oname := fmt.Sprintf("mr-out-%d", reply.TaskNo)
 			ofile, _ := os.Create(oname)
 
 			i := 0
