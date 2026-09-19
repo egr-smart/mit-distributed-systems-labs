@@ -47,14 +47,14 @@ mr-build: .FORCE check-version
 	go build $(RACE) -o main/mrsequential main/mrsequential.go
 	go build $(RACE) -o main/mrcoordinator main/mrcoordinator.go
 	go build $(RACE) -o main/mrworker main/mrworker.go&
-	(cd mrapps && go build $(RACE) -buildmode=plugin wc.go) || exit 1
-	(cd mrapps && go build $(RACE) -buildmode=plugin indexer.go) || exit 1
-	(cd mrapps && go build $(RACE) -buildmode=plugin mtiming.go) || exit 1
-	(cd mrapps && go build $(RACE) -buildmode=plugin rtiming.go) || exit 1
-	(cd mrapps && go build $(RACE) -buildmode=plugin jobcount.go) || exit 1
-	(cd mrapps && go build $(RACE) -buildmode=plugin early_exit.go) || exit 1
-	(cd mrapps && go build $(RACE) -buildmode=plugin crash.go) || exit 1
-	(cd mrapps && go build $(RACE) -buildmode=plugin nocrash.go) || exit 1
+	(cd mrapps && go build $(RACE) -buildmode=plugin -ldflags="-w" wc.go) || exit 1
+	(cd mrapps && go build $(RACE) -buildmode=plugin -ldflags="-w" indexer.go) || exit 1
+	(cd mrapps && go build $(RACE) -buildmode=plugin -ldflags="-w" mtiming.go) || exit 1
+	(cd mrapps && go build $(RACE) -buildmode=plugin -ldflags="-w" rtiming.go) || exit 1
+	(cd mrapps && go build $(RACE) -buildmode=plugin -ldflags="-w" jobcount.go) || exit 1
+	(cd mrapps && go build $(RACE) -buildmode=plugin -ldflags="-w" early_exit.go) || exit 1
+	(cd mrapps && go build $(RACE) -buildmode=plugin -ldflags="-w" crash.go) || exit 1
+	(cd mrapps && go build $(RACE) -buildmode=plugin -ldflags="-w" nocrash.go) || exit 1
 
 .PHONY: .FORCE $(MAINS) $(MAIN_BUILDS)
 
